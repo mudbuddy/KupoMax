@@ -47,24 +47,27 @@ namespace Kupo.Rotations
         [Behavior(BehaviorType.Pull)]
         public Composite CreateBasicPull()
         {
-                        return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
+            return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
                 new Decorator(ctx => ctx != null,new PrioritySelector(
-                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
-                        CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, ctx => Core.Player.CombatReach + PullRange + (ctx as GameObject).CombatReach, true, "Moving to unit"),
-                Spell.PullCast("Heavy Swing")
-                )));
+                    CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
+                    CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, ctx => Core.Player.CombatReach + PullRange + (ctx as GameObject).CombatReach, true, "Moving to unit"),
+                    Spell.PullCast("Heavy Swing")
+            )));
         }
 
         [Behavior(BehaviorType.Heal)]
         public Composite CreateBasicHeal()
         {
             return new PrioritySelector(
+                // CROSS CLASS SKILLS
+                Spell.Apply("Second Wind", r => Core.Player.CurrentHealthPercent <= 66, on => Core.Player),
+                // MAIN CLASS SKILLS
                 Spell.Apply("Foresight", r => Core.Player.CurrentHealthPercent <= 70,r=>Core.Player),
                 Spell.Apply("Bloodbath", r => Core.Player.CurrentHealthPercent <= 50, r => Core.Player),
                 Spell.Cast("Inner Beast", r => Core.Player.CurrentHealthPercent <= 60 && Core.Player.HasAura("Infuriated"), r => Core.Player),
                 Spell.Cast("Convalescence", r => Core.Player.CurrentHealthPercent <= 50, r => Core.Player),
                 Spell.Apply("Thrill of Battle", r => Core.Player.CurrentHealthPercent <= 30, r => Core.Player)
-                );
+            );
         }
 
 
@@ -73,7 +76,7 @@ namespace Kupo.Rotations
         {
             return new PrioritySelector(
                 Spell.Apply("Defiance",  r => Core.Player)
-                );
+            );
         }
 
         [Behavior(BehaviorType.Combat,GameContext.PvP)]
@@ -88,7 +91,7 @@ namespace Kupo.Rotations
                         Spell.Apply("Storm's Path", r => Actionmanager.LastSpell.Name == "Maim"),
                         Spell.Cast("Maim", r => Actionmanager.LastSpell.Name == "Heavy Swing"),
                         Spell.Cast("Heavy Swing", r => true)
-                        )));
+            )));
         }
 
         [Behavior(BehaviorType.Combat)]
@@ -106,8 +109,8 @@ namespace Kupo.Rotations
                         Spell.Cast("Butcher's Block", r => Actionmanager.LastSpell.Name == "Skull Sunder"),
                         Spell.Cast("Maim", r => Actionmanager.LastSpell.Name == "Heavy Swing" && !Core.Player.HasAura("Maim")),
                         Spell.Cast("Skull Sunder", r => Actionmanager.LastSpell.Name == "Heavy Swing"),
-                       Spell.Cast("Heavy Swing", r => true)
-                        )));
+                        Spell.Cast("Heavy Swing", r => true)
+            )));
         }
     }
 }

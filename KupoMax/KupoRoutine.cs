@@ -177,15 +177,6 @@ namespace Kupo
             return UnfriendlyUnits.Count(u => u.ObjectId != target.ObjectId && u.Location.Distance3D(tarLoc) <= range);
         }
 
-        public IEnumerable<BattleCharacter> ListEnemiesNearTarget(float range)
-        {
-            var target = Core.Player.CurrentTarget;
-            if (target == null)
-                return new List<BattleCharacter>();
-            var tarLoc = target.Location;
-            return UnfriendlyUnits.Where(u => u.ObjectId != target.ObjectId && u.Location.Distance3D(tarLoc) <= range);
-        }
-
         //protected IEnumerable<GameObject> UnfriendlyMeleeUnits { get { return UnfriendlyUnits.Where(u => Actionmanager.InSpellInRangeLOS()); } }
 
         protected IEnumerable<BattleCharacter> UnfriendlyUnits
@@ -224,6 +215,45 @@ namespace Kupo
         }
 
 
+
+        #endregion
+
+        #region KupoMax
+
+        public IEnumerable<BattleCharacter> ListEnemiesNearTarget(float range)
+        {
+            var target = Core.Player.CurrentTarget;
+            if (target == null)
+                return new List<BattleCharacter>();
+            var tarLoc = target.Location;
+            return UnfriendlyUnits.Where(u => u.ObjectId != target.ObjectId && u.Location.Distance3D(tarLoc) <= range);
+        }
+
+        public List<Character> LowPartyMembersNear(Clio.Utilities.Vector3 l, float dist, int pct, bool self)
+        {
+            List<Character> members = new List<Character>();
+            if (!PartyManager.IsInParty)
+            {
+                foreach (PartyMember pm in PartyManager.AllMembers)
+                {
+                    if (pm.IsInObjectManager)
+                    {
+                        GameObject go = GameObjectManager.GetObjectByObjectId(pm.ObjectId);
+                        if (go != null)
+                        {
+                            Character c = (Character)go;
+                            if (c.CurrentHealthPercent < pct && c.Location.Distance3D(l) <= dist)
+                            {
+                                if ((!self && !c.IsMe) || (self && c.IsMe))
+                                    members.Add(c);
+                            }
+                        }
+                    }
+                }
+            }
+            Logging.Write("{0} Low Party Members under {1}% within {2} yalm of {3}", members.Count, pct, dist, l);
+            return members;
+        }
 
         #endregion
 

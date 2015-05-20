@@ -31,9 +31,8 @@ namespace Kupo.Rotations
 
         public override float PullRange
         {
-            get { return 20; }
+            get { return WindowSettings.PullRange; }
         }
-
 
         [Behavior(BehaviorType.Rest)]
         public Composite CreateBasicRest()
@@ -44,13 +43,16 @@ namespace Kupo.Rotations
         [Behavior(BehaviorType.Pull)]
         public Composite CreateBasicPull()
         {
-                        return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
-                new Decorator(ctx => ctx != null,new PrioritySelector(
-
-                         CommonBehaviors.MoveToLos(ctx => ctx as BattleCharacter),
-                        CommonBehaviors.MoveAndStop(ctx => (ctx as BattleCharacter).Location, PullRange, true, "Moving to unit"),
+            return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
+                new Decorator(ctx => ctx != null, new PrioritySelector(
+                    new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject)
+                    ),
+                    new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                        CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")
+                    ),
                     Spell.PullCast("Stone")
-                )));
+            )));
         }
 
         [Behavior(BehaviorType.PreCombatBuffs)]
@@ -59,7 +61,7 @@ namespace Kupo.Rotations
             return new PrioritySelector(
                 SummonChocobo(),
                 Spell.Apply("Protect", r => true, r => Core.Player)
-                );
+            );
         }
 
         [Behavior(BehaviorType.Heal, GameContext.PvP)]
@@ -68,27 +70,43 @@ namespace Kupo.Rotations
             return new PrioritySelector(ctx => HealTargeting.Instance.FirstUnit,
                 new Decorator(ctx => ctx != null,
                     new PrioritySelector(
-                        CommonBehaviors.MoveToLos(ctx => ctx as BattleCharacter),
-                        CommonBehaviors.MoveAndStop(ctx => (ctx as BattleCharacter).Location, 25f, true, "Moving to unit"),
+                        new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                            CommonBehaviors.MoveToLos(ctx => ctx as GameObject)
+                        ),
+                        new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                            CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")
+                        ),
                         Spell.Cast("Cure", r => HealTargeting.Instance.FirstUnit.CurrentHealthPercent < 80, r => HealTargeting.Instance.FirstUnit)
-                        ))
-
+                ))
                 //As a pvp healer dont let combat logic run
                 , new ActionAlwaysSucceed()
-                );
+           );
+        }
+
+        [Behavior(BehaviorType.PreCombatBuffs, GameContext.Instances)]
+        public Composite CreateBasicPreCombatBuffsParty()
+        {
+            return new PrioritySelector(
+                Spell.Apply("Protect", r => true, r => Core.Player)
+            );
         }
 
         [Behavior(BehaviorType.Heal, GameContext.Instances)]
         public Composite CreateHealParty()
         {
-            return new PrioritySelector(ctx => HealTargeting.Instance.FirstUnit,
-                new Decorator(ctx => ctx != null,
-                    new PrioritySelector(
-                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
-                        CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit"),
-                        Spell.Cast("Cure", ctx => (ctx as Character).CurrentHealthPercent < 80, r => HealTargeting.Instance.FirstUnit)
-                        , new ActionAlwaysSucceed()
-                        )));
+            return new PrioritySelector(
+                Spell.Cast("Medica", req => (LowPartyMembersNear(Core.Player.Location, 12f, 75, true)).Count >= 3, on => Core.Player),
+                new PrioritySelector(ctx => HealTargeting.Instance.FirstUnit,
+                    new Decorator(ctx => ctx != null,
+                        new PrioritySelector(
+                            new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                                CommonBehaviors.MoveToLos(ctx => ctx as GameObject)
+                            ),
+                            new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                                CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")
+                            ),
+                            Spell.Cast("Cure", ctx => (ctx as Character).CurrentHealthPercent < 80, r => HealTargeting.Instance.FirstUnit)
+            ))));
         }
 
         [Behavior(BehaviorType.Heal)]
@@ -100,7 +118,7 @@ namespace Kupo.Rotations
                 //If we have a free Cure II and we have Cure II use it!
                 Spell.Cast("Cure II", r => Core.Player.HasAura("Freecure"), r => Core.Player),
                 Spell.Cast("Cure", r => Core.Player.CurrentHealthPercent <= 40, r => Core.Player)
-                );
+            );
         }
 
         [Behavior(BehaviorType.Combat)]
@@ -109,10 +127,14 @@ namespace Kupo.Rotations
             return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
                 new Decorator(ctx => ctx != null,
                     new PrioritySelector(
-                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
-                        CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit"),
+                        new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                            CommonBehaviors.MoveToLos(ctx => ctx as GameObject)
+                        ),
+                        new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                            CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")
+                        ),
                         //Check to see if we have cleric stance up or not -- Gotta get them deepz
-                        Spell.Cast("Cleric Stance", r => !Core.Player.HasAura("Cleric Stance"), r => Core.Player),
+                        Spell.Cast("Cleric Stance", r => !Core.Player.HasAura("Cleric Stance") && !PartyManager.IsInParty, r => Core.Player),
 
                         //Check to see if we need to get mana back
                         Spell.Cast("Shroud of Saints", r => (Core.Player.MaxMana - Core.Player.CurrentMana > 1200), r => Core.Player),
@@ -126,12 +148,12 @@ namespace Kupo.Rotations
                         Spell.Apply("Thunder"),
 
                         //Use the push back if we can
-                        Spell.Cast("Fluid Aura", r => Core.Target.Distance2D() <= 15f),
+                        Spell.Cast("Fluid Aura", r => !PartyManager.IsInParty && Core.Target.Distance2D() <= 15f),
 
                         //Bread and butter Stone I/II spam
                         Spell.Cast("Stone", r => Core.Player.ClassLevel < 22),
                         Spell.Cast("Stone II")
-                        )));
+            )));
         }
     }
 }
