@@ -36,6 +36,8 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -75,8 +77,11 @@
     <Compile Include="Rotations\Thaumaturge.cs" />
     <Compile Include="Settings\ArcanistSettings.cs" />
     <Compile Include="Settings\ArcherBardSettings.cs" />
+    <Compile Include="Settings\ConjurerWhiteMageSettings.cs" />
     <Compile Include="Settings\KupoSettings.cs" />
-    <Compile Include="Settings\SettingsForm.cs" />
+    <Compile Include="Settings\SettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Settings\SettingsForm.Designer.cs">
       <DependentUpon>SettingsForm.cs</DependentUpon>
     </Compile>
