@@ -26,41 +26,49 @@ namespace Kupo.Settings
         {
         }
 
-
         [Setting]
         [DefaultValue(true)]
+        [Category("Misc")]
         public bool Debug { get; set; }
 
         [Setting]
         [DefaultValue(40f)]
+        [Category("Recovery")]
         public float RestHealth { get; set; }
 
         [Setting]
         [DefaultValue(40f)]
+        [Category("Recovery")]
         public float RestEnergy { get; set; }
 
         [Setting]
         [DefaultValue(false)]
+        [Category("Misc")]
         public bool SummonChocobo { get; set; }
 
         [Setting]
+        [DefaultValue(true)]
+        [Category("Misc")]
+        public bool AllowMovement { get; set; }
+
+        [Setting]
         [DefaultValue(false)]
+        [Category("AOE")]
         public bool UseAOE { get; set; }
 
         [Setting]
-        [DefaultValue(true)]
-        public bool AssistTank { get; set; }
-
-        [Setting]
         [DefaultValue(5)]
+        [Category("AOE")]
         public int AOERange { get; set; }
 
         [Setting]
         [DefaultValue(3)]
+        [Category("AOE")]
         public int AOECount { get; set; }
 
         [Setting]
         [DefaultValue(20)]
+        [Category("Misc")]
         public int PullRange { get; set; }
 
         [Browsable(false)]
