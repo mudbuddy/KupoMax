@@ -49,12 +49,16 @@ namespace Kupo.Rotations
         [Behavior(BehaviorType.Pull)]
         public Composite CreateBasicPull()
         {
-                        return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
-                new Decorator(ctx => ctx != null,new PrioritySelector(
-                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
-                        CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, ctx => Core.Player.CombatReach + PullRange + (ctx as GameObject).CombatReach, true, "Moving to unit"),
-                    Spell.PullCast("Fast Blade")
-                )));
+            return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
+                new Decorator(ctx => ctx != null,
+                    new PrioritySelector(
+                        new Decorator(req => WindowSettings.AllowMovement,
+                            new PrioritySelector(
+                                CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
+                                CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, ctx => Core.Player.CombatReach + PullRange + (ctx as GameObject).CombatReach, true, "Moving to unit")
+                        )),
+                        Spell.PullCast("Fast Blade")
+            )));
         }
 
         [Behavior(BehaviorType.Combat)]
@@ -63,14 +67,20 @@ namespace Kupo.Rotations
             return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
                 new Decorator(ctx => ctx != null,
                     new PrioritySelector(
-                        CommonBehaviors.MoveToLos(ctx => ctx as BattleCharacter),
-                        CommonBehaviors.MoveAndStop(ctx => (ctx as BattleCharacter).Location, ctx => PullRange + (ctx as BattleCharacter).CombatReach, true, "Moving to unit"),
-                        Spell.Cast("Riot Blade", r => Actionmanager.LastSpell.Name == "Savage Blade"),
-                        //Check for mana level at higher level when theother combo action is avail
+                        new Decorator(req => WindowSettings.AllowMovement,
+                            new PrioritySelector(
+                                CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
+                                CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, ctx => Core.Player.CombatReach + PullRange + (ctx as GameObject).CombatReach, true, "Moving to unit")
+                        )),
+                        Spell.Apply("Rampart", req => Core.Player.CurrentHealthPercent <= 33, on => Core.Player),
+                        Spell.Apply("Convalescence", req => Core.Player.CurrentHealthPercent <= 66, on => Core.Player),
+                        Spell.Apply("Flash", req => UnaggrodEnemies(Core.Player.Location,5f).Count() > 0, on => Core.Player),
+                        Spell.Apply("Fight or Flight", on => Core.Player),
+                        Spell.Cast("Riot Blade", r => Core.Player.CurrentManaPercent <= 50 && Actionmanager.LastSpell.Name == "Fast Blade"),
                         Spell.Cast("Savage Blade", r => Actionmanager.LastSpell.Name == "Fast Blade"),
-                        Spell.Cast("Fast Blade", r => true)
+                        Spell.Cast("Fast Blade")
                         // r => Actionmanager.LastSpellId == 0 || Actionmanager.LastSpell.Name == "Full Thrust" )
-                        )));
+            )));
         }
     }
 }
