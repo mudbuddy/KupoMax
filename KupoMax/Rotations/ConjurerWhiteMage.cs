@@ -13,6 +13,7 @@ using Kupo;
 using Kupo.Helpers;
 using TreeSharp;
 using Action = TreeSharp.Action;
+using Kupo.Settings;
 
 namespace Kupo.Rotations
 {
@@ -34,6 +35,11 @@ namespace Kupo.Rotations
             get { return WindowSettings.PullRange; }
         }
 
+        public override void OnInitialize()
+        {
+            WindowSettings = new ConjurerWhiteMageSettings();
+        }
+
         [Behavior(BehaviorType.Rest)]
         public Composite CreateBasicRest()
         {
@@ -44,15 +50,11 @@ namespace Kupo.Rotations
         public Composite CreateBasicPull()
         {
             return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
-                new Decorator(ctx => ctx != null, new PrioritySelector(
-                    new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
-                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject)
-                    ),
-                    new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
-                        CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")
-                    ),
-                    Spell.PullCast("Stone")
-            )));
+                new Decorator(ctx => ctx != null && WindowSettings.AllowMovement, 
+                    new PrioritySelector(
+                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
+                        CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit"),
+                        Spell.PullCast("Stone")     )));
         }
 
         [Behavior(BehaviorType.PreCombatBuffs)]
@@ -60,7 +62,7 @@ namespace Kupo.Rotations
         {
             return new PrioritySelector(
                 SummonChocobo(),
-                Spell.Apply("Protect", r => true, r => Core.Player)
+                Spell.Apply("Protect", on => Core.Player)
             );
         }
 
@@ -68,26 +70,24 @@ namespace Kupo.Rotations
         public Composite CreateHealPvP()
         {
             return new PrioritySelector(ctx => HealTargeting.Instance.FirstUnit,
-                new Decorator(ctx => ctx != null,
+                new Decorator(ctx => ctx != null && WindowSettings.AllowMovement,
                     new PrioritySelector(
-                        new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
-                            CommonBehaviors.MoveToLos(ctx => ctx as GameObject)
-                        ),
-                        new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
-                            CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")
-                        ),
-                        Spell.Cast("Cure", r => HealTargeting.Instance.FirstUnit.CurrentHealthPercent < 80, r => HealTargeting.Instance.FirstUnit)
-                ))
-                //As a pvp healer dont let combat logic run
-                , new ActionAlwaysSucceed()
-           );
+                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
+                        CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit"),
+                        Spell.Cast("Cure", 
+                            req => HealTargeting.Instance.FirstUnit.CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).CurePartyPercent, 
+                            on => HealTargeting.Instance.FirstUnit)
+                )), 
+                new ActionAlwaysSucceed()       );
         }
 
         [Behavior(BehaviorType.PreCombatBuffs, GameContext.Instances)]
         public Composite CreateBasicPreCombatBuffsParty()
         {
             return new PrioritySelector(
-                Spell.Apply("Protect", r => true, r => Core.Player)
+                Spell.Apply("Protect", 
+                    req => PartyManager.IsInParty && VisiblePartyMembers().Where(u => !u.HasAura("Protect")).Count() > 0, 
+                    on => VisiblePartyMembers().Where(u => !u.HasAura("Protect")).First())
             );
         }
 
@@ -95,29 +95,72 @@ namespace Kupo.Rotations
         public Composite CreateHealParty()
         {
             return new PrioritySelector(
-                Spell.Cast("Medica", req => (LowPartyMembersNear(Core.Player.Location, 12f, 75, true)).Count >= 3, on => Core.Player),
                 new PrioritySelector(ctx => HealTargeting.Instance.FirstUnit,
-                    new Decorator(ctx => ctx != null,
+                    Spell.Cast("Cure II", 
+                        ctx => (ctx as Character).CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).Cure2HealPercent, 
+                        on => HealTargeting.Instance.FirstUnit)),
+                Spell.Apply("Medica", 
+                    req => (LowPartyMembersNear(Core.Player.Location, 12f, ((ConjurerWhiteMageSettings)WindowSettings).MedicaPercent)).Count() >= ((ConjurerWhiteMageSettings)WindowSettings).MedicaCount, 
+                    on => Core.Player),
+                new PrioritySelector(ctx => HealTargeting.Instance.FirstUnit,
+                    new Decorator(ctx => ctx != null && WindowSettings.AllowMovement,
                         new PrioritySelector(
-                            new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
-                                CommonBehaviors.MoveToLos(ctx => ctx as GameObject)
-                            ),
-                            new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
-                                CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")
-                            ),
-                            Spell.Cast("Cure", ctx => (ctx as Character).CurrentHealthPercent < 80, r => HealTargeting.Instance.FirstUnit)
-            ))));
+                                CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
+                                CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit"))),
+                    Spell.Cast("Cure II", 
+                        ctx => Core.Player.HasAura("Freecure") 
+                            && (ctx as Character).CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).CurePartyPercent, 
+                        on => HealTargeting.Instance.FirstUnit),
+                    Spell.Cast("Cure", 
+                        ctx => (ctx as Character).CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).CurePartyPercent, 
+                        on => HealTargeting.Instance.FirstUnit),
+                    Spell.Apply("Regen",
+                        ctx => (ctx as Character).CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).RegenPercent,
+                        on => HealTargeting.Instance.FirstUnit),
+                    Spell.Apply("Esuna", 
+                        req => DebuffedPartyMembers().Count() > 0, 
+                        on => DebuffedPartyMembers().First()),
+                    new Throttle(8,Spell.Apply("Repose", 
+                        req => Attackers(Core.Me,"Sleep").Count > 0 
+                            && ((ConjurerWhiteMageSettings)WindowSettings).ReposeAttackers, 
+                        on => Attackers(Core.Me,"Sleep").First())),
+                    new Throttle(15,Spell.Cast("Raise", 
+                        req => VisiblePartyMembers().Where(pm => pm.IsDead).Count() > 0, 
+                        on => VisiblePartyMembers().Where(pm => pm.IsDead).First()))));
+        }
+
+        [Behavior(BehaviorType.CombatBuffs)]
+        public Composite CreateBasicCombatBuffsParty()
+        {
+            return new PrioritySelector(
+                //Spell.Apply("Stoneskin", req => VisiblePartyMembers().Where(c => !c.HasAura("Stoneskin")).Count() > 0, r => VisiblePartyMembers().Where(c => !c.HasAura("Stoneskin")).First()),
+                //Spell.Apply("Stoneskin", req => !Core.Player.HasAura("Stoneskin"), on => Core.Player)
+                //Spell.Apply("Presence of Mind", on => Core.Player)
+            );
         }
 
         [Behavior(BehaviorType.Heal)]
         public Composite CreateBasicHeal()
         {
             return new PrioritySelector(
-                //Check to see if we have cleric stance up or not -- If so, remove it for better heals
-                Spell.Apply("Cleric Stance", r => Core.Player.HasAura("Cleric Stance") && Core.Player.CurrentHealthPercent <= 40, r => Core.Player),
-                //If we have a free Cure II and we have Cure II use it!
-                Spell.Cast("Cure II", r => Core.Player.HasAura("Freecure"), r => Core.Player),
-                Spell.Cast("Cure", r => Core.Player.CurrentHealthPercent <= 40, r => Core.Player)
+                Spell.Apply("Cleric Stance", 
+                    req => Core.Player.HasAura("Cleric Stance") 
+                        && Core.Player.CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).CureSoloPercent,
+                    on => Core.Player),
+                Spell.Apply("Cure II", 
+                    req => (Core.Player.HasAura("Freecure") 
+                            && Core.Player.CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).CureSoloPercent)
+                        || Core.Player.CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).Cure2HealPercent, 
+                    on => Core.Player),
+                Spell.Apply("Cure", 
+                    req => Core.Player.CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).CureSoloPercent,
+                    on => Core.Player),
+                Spell.Apply("Regen",
+                    req => Core.Player.CurrentHealthPercent < ((ConjurerWhiteMageSettings)WindowSettings).RegenPercent,
+                    on => Core.Player),
+                Spell.Apply("Esuna", 
+                    req => HasDebuff(Core.Player), 
+                    on => Core.Player)
             );
         }
 
@@ -127,32 +170,34 @@ namespace Kupo.Rotations
             return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
                 new Decorator(ctx => ctx != null,
                     new PrioritySelector(
-                        new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                        new Decorator(req => WindowSettings.AllowMovement,
                             CommonBehaviors.MoveToLos(ctx => ctx as GameObject)
                         ),
-                        new Decorator(req => !BotManager.Current.Name.Contains("Assist"),
+                        new Decorator(req => WindowSettings.AllowMovement,
                             CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")
                         ),
-                        //Check to see if we have cleric stance up or not -- Gotta get them deepz
-                        Spell.Cast("Cleric Stance", r => !Core.Player.HasAura("Cleric Stance") && !PartyManager.IsInParty, r => Core.Player),
-
-                        //Check to see if we need to get mana back
-                        Spell.Cast("Shroud of Saints", r => (Core.Player.MaxMana - Core.Player.CurrentMana > 1200), r => Core.Player),
-
-                        //Get our DoTs up and going
-                        //Get the Aero I/II dot up and going
+                        Spell.Apply("Presence of Mind", on => Core.Player),
+                        Spell.Cast("Cleric Stance", 
+                            req => !Core.Player.HasAura("Cleric Stance") 
+                                && ((ConjurerWhiteMageSettings)WindowSettings).UseClericStance, 
+                            on => Core.Player),
+                        Spell.Cast("Shroud of Saints", 
+                            req => (Core.Player.MaxMana - Core.Player.CurrentMana > 1200) 
+                                || (Core.Player.CurrentManaPercent < ((ConjurerWhiteMageSettings)WindowSettings).SaveManaPercent), 
+                            on => Core.Player),
                         Spell.Apply("Aero II"),
-                        Spell.Apply("Aero", r => Core.Player.ClassLevel < 46),
-
-                        //Get the thunder dot up and going
+                        Spell.Apply("Aero", req => Core.Player.ClassLevel < 46),
                         Spell.Apply("Thunder"),
-
-                        //Use the push back if we can
-                        Spell.Cast("Fluid Aura", r => !PartyManager.IsInParty && Core.Target.Distance2D() <= 15f),
-
-                        //Bread and butter Stone I/II spam
-                        Spell.Cast("Stone", r => Core.Player.ClassLevel < 22),
-                        Spell.Cast("Stone II")
+                        Spell.Cast("Fluid Aura", 
+                            req => ((ConjurerWhiteMageSettings)WindowSettings).UseFluidAura 
+                                && Core.Target.Distance2D() <= 15f),
+                        Spell.Cast("Stone", 
+                            req => Core.Player.CurrentManaPercent >= ((ConjurerWhiteMageSettings)WindowSettings).SaveManaPercent 
+                                && (TimeToDeathExtension.TimeToDeath((BattleCharacter)Core.Player.CurrentTarget,long.MinValue) >= 2) 
+                                && Core.Player.ClassLevel < 22),
+                        Spell.Cast("Stone II", 
+                            req => Core.Player.CurrentManaPercent >= ((ConjurerWhiteMageSettings)WindowSettings).SaveManaPercent 
+                                && (TimeToDeathExtension.TimeToDeath((BattleCharacter)Core.Player.CurrentTarget, long.MinValue) >= 2))
             )));
         }
     }
