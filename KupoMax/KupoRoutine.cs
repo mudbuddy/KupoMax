@@ -229,32 +229,97 @@ namespace Kupo
             return UnfriendlyUnits.Where(u => u.ObjectId != target.ObjectId && u.Location.Distance3D(tarLoc) <= range);
         }
 
-        public List<Character> LowPartyMembersNear(Clio.Utilities.Vector3 l, float dist, int pct, bool self)
+        public IEnumerable<Character> LowPartyMembersNear(Clio.Utilities.Vector3 l, float dist, int pct)
+        {
+            //Logging.Write("{0} Low Party Members under {1}% within {2} yalm of {3}", members.Count, pct, dist, l);
+            return VisiblePartyMembers().Where(c => c.CurrentHealthPercent < pct && c.Location.Distance3D(l) <= dist);
+        }
+
+        public IEnumerable<Character> DebuffedPartyMembers()
+        {
+            return VisiblePartyMembers().Where(pm => HasDebuff(pm));
+        }
+
+        private static String[] Debuffs = { 
+            "Heavy","Blind","Bleed","Disease","Incapacitation","Leaden","Mute",
+            "Pacification","Paralysis","Petrification","Pox","Silence","Sleep","Slow","Doom"};
+
+        public bool HasDebuff(Character c)
+        {
+            foreach (String aura in Debuffs)
+                if (c.HasAura(aura))
+                    return true;
+            return false;
+        }
+
+        public bool IsTank(Character c)
+        {
+            switch (c.CurrentJob)
+            {
+                case ClassJobType.Paladin:
+                case ClassJobType.Marauder:
+                case ClassJobType.Gladiator:
+                case ClassJobType.Warrior:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public List<Character> VisiblePartyMembers()
         {
             List<Character> members = new List<Character>();
-            if (!PartyManager.IsInParty)
+            if (PartyManager.IsInParty)
             {
                 foreach (PartyMember pm in PartyManager.AllMembers)
                 {
                     if (pm.IsInObjectManager)
                     {
-                        GameObject go = GameObjectManager.GetObjectByObjectId(pm.ObjectId);
-                        if (go != null)
-                        {
-                            Character c = (Character)go;
-                            if (c.CurrentHealthPercent < pct && c.Location.Distance3D(l) <= dist)
-                            {
-                                if ((!self && !c.IsMe) || (self && c.IsMe))
-                                    members.Add(c);
-                            }
-                        }
+                        Character c = (Character)GameObjectManager.GetObjectByObjectId(pm.ObjectId);
+                        members.Add(c);
                     }
                 }
             }
-            Logging.Write("{0} Low Party Members under {1}% within {2} yalm of {3}", members.Count, pct, dist, l);
             return members;
         }
 
+        public List<BattleCharacter> Attackers(Character c,params String[] exAuras)
+        {
+            List<BattleCharacter> attackers = new List<BattleCharacter>();
+            foreach (BattleCharacter b in GameObjectManager.Attackers)
+            {
+                bool add = false;
+                if (b.CurrentTargetId == c.ObjectId)
+                {
+                    add = true;
+                    foreach (String a in exAuras)
+                    {
+                        if (b.HasAura(a))
+                            add = false;
+                    }
+                    if(add)
+                        attackers.Add(b);
+                }
+            }
+            return attackers;
+        }
+
+        public List<Character> UnaggrodEnemies(Clio.Utilities.Vector3 loc, float dist)
+        {
+            List<Character> enemies = new List<Character>();
+            foreach (GameObject o in GameObjectManager.GameObjects)
+            {
+                if (o != null
+                        && o is Character
+                        && ((Character)o).CurrentTargetId != Core.Player.ObjectId 
+                        && o.Location.Distance3D(loc) <= dist
+                        && o.CanAttack
+                        && o.IsValid
+                        && o.IsTargetable)
+                    enemies.Add((Character)o);
+            }
+            return enemies;
+        }
         #endregion
 
         protected delegate T Selection<out T>(object context);
