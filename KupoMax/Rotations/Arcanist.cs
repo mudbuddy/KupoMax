@@ -87,7 +87,7 @@ namespace Kupo.Rotations
 
         public override float PullRange
         {
-            get { return 20; }
+            get { return WindowSettings.PullRange; }
         }
 
         public override ClassJobType[] Class
@@ -107,9 +107,9 @@ namespace Kupo.Rotations
         {
             return new PrioritySelector(
                 new Decorator(r => Core.Me.SpellCastInfo != null && Core.Me.SpellCastInfo.Name == "Physick" && !Resting, new Action(r => Actionmanager.StopCasting())),
-                Spell.Apply("Aetherflow", r => Core.Player.CurrentManaPercent < 65 || (Resting && Core.Player.CurrentManaPercent < settings.RestEnergyDone), r => Core.Player),
-                Spell.Cast("Physick", r => Resting && Core.Player.CurrentHealthPercent <= settings.RestHealthDone, r => Core.Player),
-                DefaultRestBehavior(r => Core.Player.CurrentManaPercent));
+                    Spell.Apply("Aetherflow", r => Core.Player.CurrentManaPercent < 65 || (Resting && Core.Player.CurrentManaPercent < settings.RestEnergyDone), r => Core.Player),
+                    Spell.Cast("Physick", r => Resting && Core.Player.CurrentHealthPercent <= settings.RestHealthDone, r => Core.Player),
+                    DefaultRestBehavior(r => Core.Player.CurrentManaPercent));
         }
 
         [Behavior(BehaviorType.Heal)]
@@ -120,8 +120,6 @@ namespace Kupo.Rotations
                 Spell.Cast("Physick", r => Core.Player.CurrentHealthPercent <= 40, r => Core.Player),
                 Spell.Apply("Sustain", r => Core.Player.Pet != null && Core.Player.Pet.CurrentHealthPercent <= settings.SustainPet, r => Core.Player.Pet),
                 Spell.Cast("Physick", r => Core.Player.Pet != null && Core.Player.Pet.CurrentHealthPercent <= settings.HealPet, r => Core.Player.Pet)
-
-
                 );
         }
 
@@ -130,19 +128,16 @@ namespace Kupo.Rotations
         {
             return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
                 new Decorator(ctx => ctx != null,new PrioritySelector(
-
-
-                EnsureTarget,
-                //Stop double casting due to delay
-                new Decorator(r => Core.Me.SpellCastInfo != null && Core.Me.SpellCastInfo.SpellData.Name.Equals(WhichPet) && Core.Player.Pet != null, new Action(r => Actionmanager.StopCasting())),
-                Spell.Cast(r => WhichPet, r => Core.Player.Pet == null && Actionmanager.HasSpell(WhichPet), r => Core.Player),
-
-
-                CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
-                CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit"),
-
-                Spell.PullApply(r => BestPullSpell)
-                )));
+                    EnsureTarget,
+                    //Stop double casting due to delay
+                    new Decorator(r => Core.Me.SpellCastInfo != null && Core.Me.SpellCastInfo.SpellData.Name.Equals(WhichPet) && Core.Player.Pet != null, new Action(r => Actionmanager.StopCasting())),
+                    Spell.Cast(r => WhichPet, r => Core.Player.Pet == null && Actionmanager.HasSpell(WhichPet), r => Core.Player),
+                    new Decorator(req => WindowSettings.AllowMovement, 
+                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject)),
+                    new Decorator(req => WindowSettings.AllowMovement, 
+                        CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")),
+                    Spell.PullApply(r => BestPullSpell)
+                    )));
         }
 
         [Behavior(BehaviorType.Combat)]
@@ -151,15 +146,18 @@ namespace Kupo.Rotations
             return new PrioritySelector(ctx => Core.Player.CurrentTarget as BattleCharacter,
                 new Decorator(ctx => ctx != null,
                     new PrioritySelector(
-                        CommonBehaviors.MoveToLos(ctx => ctx as GameObject),
-                        new Decorator(r => !Core.Player.IsCasting, CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")),
+                        new Decorator(req => WindowSettings.AllowMovement, 
+                            CommonBehaviors.MoveToLos(ctx => ctx as GameObject)),
+                        new Decorator(req => !Core.Player.IsCasting && WindowSettings.AllowMovement, 
+                            CommonBehaviors.MoveAndStop(ctx => (ctx as GameObject).Location, PullRange, true, "Moving to unit")),
                         Spell.Cast(r => WhichPet, r => Core.Player.Pet == null && Actionmanager.HasSpell(WhichPet), r => Core.Player),
-                        new Decorator(r => Core.Me.SpellCastInfo != null && Core.Me.SpellCastInfo.SpellData.Name.Equals(WhichPet) && Core.Player.Pet != null, new Action(r => Actionmanager.StopCasting())),
-                        Spell.Apply("Bio II"),
-                        Spell.Apply("Miasma"),
-                        Spell.Apply("Bio"),
-                        Spell.Cast("Energy Drain", r => Core.Player.HasAura("Aetherflow") && Core.Player.CurrentManaPercent < WindowSettings.RestEnergyDone),
-                        Spell.Cast("Ruin", r => true)
+                        new Decorator(r => Core.Me.SpellCastInfo != null && Core.Me.SpellCastInfo.SpellData.Name.Equals(WhichPet) && Core.Player.Pet != null, 
+                            new Action(r => Actionmanager.StopCasting())),
+                        Spell.Apply("Bio II", r => TimeToDeathExtension.TimeToDeath((BattleCharacter)Core.Player.CurrentTarget, long.MinValue) >= ((settings.DOTMinTickDurationPercent / 100) * 18)),
+                        Spell.Apply("Miasma", r => TimeToDeathExtension.TimeToDeath((BattleCharacter)Core.Player.CurrentTarget,long.MinValue) >= ((settings.DOTMinTickDurationPercent / 100) * 24)),
+                        Spell.Apply("Bio", r => TimeToDeathExtension.TimeToDeath((BattleCharacter)Core.Player.CurrentTarget, long.MinValue) >= ((settings.DOTMinTickDurationPercent / 100) * 18)),
+                        Spell.Cast("Energy Drain", r => Core.Player.HasAura("Aetherflow") && Core.Player.CurrentManaPercent < settings.AetherflowPercent),
+                        Spell.Cast("Ruin")
                         )));
         }
     }
